@@ -20,6 +20,17 @@ class ChromaVectorStore:
         )
         self.collection = self.client.get_or_create_collection(name=collection_name)
 
+    def clear(self):
+        """
+        Deletes the entire collection from ChromaDB and recreates an empty one.
+        This ensures old repositories are purged when indexing a new one.
+        """
+        try:
+            self.client.delete_collection(name=self.collection.name)
+        except Exception:
+            pass
+        self.collection = self.client.get_or_create_collection(name=self.collection.name)
+
     def add_chunks(self, chunks: List[CodeChunk]):
         """
         Adds a batch of CodeChunks to the ChromaDB collection.

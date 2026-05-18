@@ -1,0 +1,1828 @@
+=== CHUNK LOG for /Users/harshitchoudhary/Tech2go/Agentic/coding-agent ===
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: main
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/app.py (Lines 5-207)
+[DEBUG] Code:
+def main(page: ft.Page):
+    page.title = "Code Next AI"
+    page.theme_mode = ft.ThemeMode.DARK
+    page.padding = 0
+    page.spacing = 0
+    page.window_width = 1200
+    page.window_height = 800
+
+    repo_path_input = ft.TextField(
+        label="Repository Path",
+        hint_text="e.g. /Users/harshitchoudhary/Tech2go/Agentic",
+        width=260,
+        bgcolor=ft.Colors.SURFACE
+    )
+    current_repo_path = None
+    
+    chat_list = ft.ListView(expand=True, spacing=15, auto_scroll=True, padding=20)
+    
+    def add_message(role, content, is_markdown=False):
+        if role == "user":
+            bg_color = ft.Colors.SURFACE_CONTAINER_HIGHEST
+            text_color = ft.Colors.ON_SURFACE_VARIANT
+            align = ft.MainAxisAlignment.END
+        else:
+            bg_color = ft.Colors.SURFACE
+            text_color = ft.Colors.ON_SURFACE
+            align = ft.MainAxisAlignment.START
+
+        if is_markdown:
+            content_control = ft.Markdown(
+                content,
+                selectable=True,
+                extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                code_theme="atom-one-dark"
+            )
+        else:
+            content_control = ft.Text(content, selectable=True)
+
+        chat_list.controls.append(
+            ft.Row(
+                [
+                    ft.Container(
+                        content=content_control,
+                        bgcolor=bg_color,
+                        padding=15,
+                        border_radius=10,
+                        expand=True if is_markdown else False
+                    )
+                ],
+                alignment=align
+            )
+        )
+        page.update()
+
+    def handle_query(e):
+        current_repo_path = repo_path_input.value
+        if not current_repo_path:
+            add_message("agent", "Please enter a repository path and index it first.")
+            return
+            
+        query = query_input.value
+        if not query or query_input.disabled:
+            return
+            
+        query_input.disabled = True
+        send_btn.disabled = True
+        loading_ring.visible = True
+        add_message("user", query)
+        query_input.value = ""
+        page.update()
+        
+        # Call backend
+        try:
+            results = query_repo(current_repo_path, query)
+            if not results:
+                add_message("agent", "No relevant code chunks found.")
+            else:
+                md_output = ""
+                for i, res in enumerate(results, 1):
+                    # Make paths relative for cleaner view
+                    try:
+                        rel_path = Path(res['file_path']).relative_to(Path(current_repo_path).resolve())
+                    except ValueError:
+                        rel_path = res['file_path']
+                        
+                    md_output += f"### {i}. `{res['symbol_name']}`\n"
+                    md_output += f"**File**: `{rel_path}` (Lines {res['start_line']}-{res['end_line']})\n\n"
+                    md_output += f"```python\n{res['code']}\n```\n\n---\n"
+                add_message("agent", md_output, is_markdown=True)
+        except Exception as ex:
+            add_message("agent", f"Error during search: {ex}")
+        finally:
+            query_input.disabled = False
+            send_btn.disabled = False
+            loading_ring.visible = False
+            query_input.focus()
+            page.update()
+
+    loading_ring = ft.ProgressRing(visible=False, width=24, height=24)
+    send_btn = ft.IconButton(
+        icon=ft.Icons.SEND_ROUNDED,
+        icon_color=ft.Colors.PRIMARY,
+        on_click=handle_query
+    )
+
+    query_input = ft.TextField(
+        hint_text="Ask a question about the codebase...",
+        expand=True,
+        on_submit=handle_query,
+        border_radius=20,
+        filled=True,
+    )
+
+
+
+    def on_select_folder_click(e):
+        import subprocess
+        try:
+            # macOS native folder picker via AppleScript (runs in subprocess to avoid thread blocking)
+            script = 'tell application "System Events" to activate\ntell application "System Events" to return POSIX path of (choose folder with prompt "Select Codebase Folder")'
+            result = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
+            if result.returncode == 0:
+                path = result.stdout.strip()
+                repo_path_input.value = path
+                page.update()
+        except Exception as ex:
+            add_message("agent", f"Could not open native folder picker. You can paste the path manually. Error: {ex}")
+
+    select_folder_btn = ft.ElevatedButton(
+        "Browse Folder...",
+        icon=ft.Icons.FOLDER_OPEN,
+        on_click=on_select_folder_click,
+        width=260
+    )
+
+    def on_index_click(e):
+        current_repo_path = repo_path_input.value
+        if not current_repo_path:
+            add_message("agent", "Please enter a repository path first.")
+            return
+        
+        index_btn.disabled = True
+        index_btn.text = "Indexing..."
+        page.update()
+        
+        try:
+            chunks = build_index(current_repo_path)
+            add_message("agent", f"Successfully indexed '{current_repo_path}'! {chunks} chunks stored.")
+        except Exception as ex:
+            add_message("agent", f"Error during indexing: {ex}")
+            
+        index_btn.disabled = False
+        index_btn.text = "Index Repository"
+        page.update()
+
+    index_btn = ft.ElevatedButton("Index Repository", on_click=on_index_click, width=200)
+
+    # UI Layout
+    sidebar = ft.Container(
+        width=300,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        padding=20,
+        content=ft.Column(
+            [
+                ft.Text("Code Next AI", size=24, weight="bold"),
+                ft.Divider(height=30),
+                ft.Text("Workspace", weight="bold"),
+                select_folder_btn,
+                repo_path_input,
+                ft.Divider(height=30),
+                index_btn
+            ],
+            spacing=10
+        )
+    )
+
+    main_area = ft.Container(
+        expand=True,
+        padding=0,
+        content=ft.Column(
+            [
+                chat_list,
+                ft.Container(
+                    padding=20,
+                    content=ft.Row(
+                        [
+                            query_input,
+                            loading_ring,
+                            send_btn
+                        ]
+                    )
+                )
+            ]
+        )
+    )
+
+    page.add(
+        ft.Row(
+            [sidebar, ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE), main_area],
+            expand=True,
+            spacing=0
+        )
+    )
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: add_message
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/app.py (Lines 23-57)
+[DEBUG] Code:
+def add_message(role, content, is_markdown=False):
+        if role == "user":
+            bg_color = ft.Colors.SURFACE_CONTAINER_HIGHEST
+            text_color = ft.Colors.ON_SURFACE_VARIANT
+            align = ft.MainAxisAlignment.END
+        else:
+            bg_color = ft.Colors.SURFACE
+            text_color = ft.Colors.ON_SURFACE
+            align = ft.MainAxisAlignment.START
+
+        if is_markdown:
+            content_control = ft.Markdown(
+                content,
+                selectable=True,
+                extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                code_theme="atom-one-dark"
+            )
+        else:
+            content_control = ft.Text(content, selectable=True)
+
+        chat_list.controls.append(
+            ft.Row(
+                [
+                    ft.Container(
+                        content=content_control,
+                        bgcolor=bg_color,
+                        padding=15,
+                        border_radius=10,
+                        expand=True if is_markdown else False
+                    )
+                ],
+                alignment=align
+            )
+        )
+        page.update()
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: handle_query
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/app.py (Lines 59-101)
+[DEBUG] Code:
+def handle_query(e):
+        current_repo_path = repo_path_input.value
+        if not current_repo_path:
+            add_message("agent", "Please enter a repository path and index it first.")
+            return
+            
+        query = query_input.value
+        if not query or query_input.disabled:
+            return
+            
+        query_input.disabled = True
+        send_btn.disabled = True
+        loading_ring.visible = True
+        add_message("user", query)
+        query_input.value = ""
+        page.update()
+        
+        # Call backend
+        try:
+            results = query_repo(current_repo_path, query)
+            if not results:
+                add_message("agent", "No relevant code chunks found.")
+            else:
+                md_output = ""
+                for i, res in enumerate(results, 1):
+                    # Make paths relative for cleaner view
+                    try:
+                        rel_path = Path(res['file_path']).relative_to(Path(current_repo_path).resolve())
+                    except ValueError:
+                        rel_path = res['file_path']
+                        
+                    md_output += f"### {i}. `{res['symbol_name']}`\n"
+                    md_output += f"**File**: `{rel_path}` (Lines {res['start_line']}-{res['end_line']})\n\n"
+                    md_output += f"```python\n{res['code']}\n```\n\n---\n"
+                add_message("agent", md_output, is_markdown=True)
+        except Exception as ex:
+            add_message("agent", f"Error during search: {ex}")
+        finally:
+            query_input.disabled = False
+            send_btn.disabled = False
+            loading_ring.visible = False
+            query_input.focus()
+            page.update()
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: on_select_folder_click
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/app.py (Lines 120-131)
+[DEBUG] Code:
+def on_select_folder_click(e):
+        import subprocess
+        try:
+            # macOS native folder picker via AppleScript (runs in subprocess to avoid thread blocking)
+            script = 'tell application "System Events" to activate\ntell application "System Events" to return POSIX path of (choose folder with prompt "Select Codebase Folder")'
+            result = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
+            if result.returncode == 0:
+                path = result.stdout.strip()
+                repo_path_input.value = path
+                page.update()
+        except Exception as ex:
+            add_message("agent", f"Could not open native folder picker. You can paste the path manually. Error: {ex}")
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: on_index_click
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/app.py (Lines 140-158)
+[DEBUG] Code:
+def on_index_click(e):
+        current_repo_path = repo_path_input.value
+        if not current_repo_path:
+            add_message("agent", "Please enter a repository path first.")
+            return
+        
+        index_btn.disabled = True
+        index_btn.text = "Indexing..."
+        page.update()
+        
+        try:
+            chunks = build_index(current_repo_path)
+            add_message("agent", f"Successfully indexed '{current_repo_path}'! {chunks} chunks stored.")
+        except Exception as ex:
+            add_message("agent", f"Error during indexing: {ex}")
+            
+        index_btn.disabled = False
+        index_btn.text = "Index Repository"
+        page.update()
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: load_settings
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/main.py (Lines 10-18)
+[DEBUG] Code:
+def load_settings():
+    settings_path = Path("settings.json")
+    if settings_path.exists():
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: build_index
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/main.py (Lines 33-95)
+[DEBUG] Code:
+def build_index(repo_path: str):
+    """
+    Scans the repository, extracts symbols, generates embeddings, and stores them.
+    """
+    repo_path_obj = Path(repo_path).expanduser().resolve()
+    print(f"[*] Scanning repository: {repo_path_obj} ...")
+    
+    scanner = FileScanner(repo_path_obj)
+    files = scanner.scan()
+    print(f"[*] Found {len(files)} valid source files.")
+
+    ast_parser = ASTParser()
+    ts_parser = TreeSitterParser()
+    chunker = ChunkBuilder()
+    embedder = OllamaEmbedder()
+    vector_store = ChromaVectorStore()
+    
+    print("[*] Purging previous index...")
+    vector_store.clear()
+    
+    if LOG_CHUNKS:
+        with open("chunks_log.txt", "w", encoding="utf-8") as f:
+            f.write(f"=== CHUNK LOG for {repo_path_obj} ===\n\n")
+
+    total_chunks = 0
+    for i, file in enumerate(files):
+        print(f"  [{i+1}/{len(files)}] Parsing {file.name} ...")
+        if file.suffix == '.py':
+            symbols = ast_parser.parse_file(file)
+            with open("log.txt", "a", encoding="utf-8") as log_f:
+                log_f.write(f"--- Symbols for {file.name} ---\n")
+                log_f.write(json.dumps(symbols, indent=4) + "\n\n")
+        else:
+            symbols = ts_parser.parse_file(file)
+            
+        if not symbols:
+            continue
+        
+        chunks = chunker.build_chunks(file, symbols)
+        if not chunks:
+            continue
+            
+        # Generate embeddings and assign to chunks
+        for chunk in chunks:
+            chunk.embedding = embedder.embed_text(chunk.code)
+            
+            if LOG_CHUNKS:
+                log_msg = (
+                    f"\n[DEBUG] --------------------------------------------------\n"
+                    f"[DEBUG] Storing Chunk -> Symbol: {chunk.symbol_name}\n"
+                    f"[DEBUG] File: {chunk.file_path} (Lines {chunk.start_line}-{chunk.end_line})\n"
+                    f"[DEBUG] Code:\n{chunk.code}\n"
+                    f"[DEBUG] --------------------------------------------------\n"
+                )
+                print(log_msg)
+                with open("chunks_log.txt", "a", encoding="utf-8") as f:
+                    f.write(log_msg + "\n")
+            
+        vector_store.add_chunks(chunks)
+        total_chunks += len(chunks)
+
+    print(f"[*] Indexing complete. Indexed {total_chunks} code chunks into ChromaDB.")
+    return total_chunks
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: query_repo
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/main.py (Lines 97-117)
+[DEBUG] Code:
+def query_repo(repo_path: str, query: str):
+    """
+    Executes a hybrid search query against the indexed repository.
+    """
+    repo_path_obj = Path(repo_path).expanduser().resolve()
+    print(f"\n==================================================")
+    print(f"QUERY:\n\"{query}\"\n")
+    print(f"RESULTS:")
+    
+    embedder = OllamaEmbedder()
+    vector_store = ChromaVectorStore()
+    
+    semantic_search = SemanticSearch(embedder, vector_store)
+    keyword_search = KeywordSearch(repo_path_obj)
+    reranker = Reranker()
+    
+    hybrid_search = HybridSearch(semantic_search, keyword_search, reranker)
+    
+    results = hybrid_search.search(query, top_k=5)
+    
+    return results
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: CodeChunk
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/models/chunk.py (Lines 5-36)
+[DEBUG] Code:
+class CodeChunk:
+    """
+    Represents a semantic chunk of code extracted from a source file.
+    """
+    chunk_id: str
+    file_path: str
+    symbol_name: str
+    chunk_type: str  # e.g., "function", "class"
+    start_line: int
+    end_line: int
+    code: str
+    docstring: Optional[str] = None
+    embedding: Optional[List[float]] = None
+
+    def to_metadata(self) -> dict:
+        """
+        Returns a dictionary suitable for ChromaDB metadata payload.
+        Chroma metadata values must be strings, ints, or floats.
+        """
+        return {
+            "chunk_id": self.chunk_id,
+            "file_path": self.file_path,
+            "symbol_name": self.symbol_name,
+            "chunk_type": self.chunk_type,
+            "start_line": self.start_line,
+            "end_line": self.end_line,
+            "has_docstring": bool(self.docstring)
+        }
+
+    def to_dict(self) -> dict:
+        """Serializes the chunk into a dictionary."""
+        return asdict(self)
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: to_metadata
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/models/chunk.py (Lines 19-32)
+[DEBUG] Code:
+def to_metadata(self) -> dict:
+        """
+        Returns a dictionary suitable for ChromaDB metadata payload.
+        Chroma metadata values must be strings, ints, or floats.
+        """
+        return {
+            "chunk_id": self.chunk_id,
+            "file_path": self.file_path,
+            "symbol_name": self.symbol_name,
+            "chunk_type": self.chunk_type,
+            "start_line": self.start_line,
+            "end_line": self.end_line,
+            "has_docstring": bool(self.docstring)
+        }
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: to_dict
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/models/chunk.py (Lines 34-36)
+[DEBUG] Code:
+def to_dict(self) -> dict:
+        """Serializes the chunk into a dictionary."""
+        return asdict(self)
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: FileScanner
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/scanner.py (Lines 5-45)
+[DEBUG] Code:
+class FileScanner:
+    """
+    Recursively scans a repository for source files, ignoring specified directories.
+    """
+    DEFAULT_IGNORES = {
+        ".git", "node_modules", "venv", "env", ".venv",
+        "dist", "build", "__pycache__", ".pytest_cache"
+    }
+
+    def __init__(self, root_dir: str | Path, ignored_dirs: Optional[Set[str]] = None):
+        """
+        Initializes the scanner with a root directory and a list of directories to ignore.
+        """
+        self.root_dir = Path(root_dir)
+        self.ignored_dirs = ignored_dirs if ignored_dirs is not None else self.DEFAULT_IGNORES
+
+    def scan(self, extensions: Optional[Set[str]] = None) -> List[Path]:
+        """
+        Scan the repository and return a list of valid file paths.
+        
+        Args:
+            extensions: Set of valid file extensions (e.g., {".py"}). Defaults to {".py"}.
+            
+        Returns:
+            A list of Path objects representing the discovered source files.
+        """
+        if extensions is None:
+            extensions = {".py", ".js", ".jsx", ".ts", ".tsx"}
+
+        valid_files = []
+
+        for current_path, dirs, files in os.walk(self.root_dir):
+            # Modify dirs in-place to prevent os.walk from descending into ignored directories
+            dirs[:] = [d for d in dirs if d not in self.ignored_dirs and not d.startswith('.')]
+
+            for file in files:
+                file_path = Path(current_path) / file
+                if file_path.suffix in extensions:
+                    valid_files.append(file_path)
+
+        return valid_files
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: __init__
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/scanner.py (Lines 14-19)
+[DEBUG] Code:
+def __init__(self, root_dir: str | Path, ignored_dirs: Optional[Set[str]] = None):
+        """
+        Initializes the scanner with a root directory and a list of directories to ignore.
+        """
+        self.root_dir = Path(root_dir)
+        self.ignored_dirs = ignored_dirs if ignored_dirs is not None else self.DEFAULT_IGNORES
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: scan
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/scanner.py (Lines 21-45)
+[DEBUG] Code:
+def scan(self, extensions: Optional[Set[str]] = None) -> List[Path]:
+        """
+        Scan the repository and return a list of valid file paths.
+        
+        Args:
+            extensions: Set of valid file extensions (e.g., {".py"}). Defaults to {".py"}.
+            
+        Returns:
+            A list of Path objects representing the discovered source files.
+        """
+        if extensions is None:
+            extensions = {".py", ".js", ".jsx", ".ts", ".tsx"}
+
+        valid_files = []
+
+        for current_path, dirs, files in os.walk(self.root_dir):
+            # Modify dirs in-place to prevent os.walk from descending into ignored directories
+            dirs[:] = [d for d in dirs if d not in self.ignored_dirs and not d.startswith('.')]
+
+            for file in files:
+                file_path = Path(current_path) / file
+                if file_path.suffix in extensions:
+                    valid_files.append(file_path)
+
+        return valid_files
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: HybridSearch
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/hybrid_search.py (Lines 7-38)
+[DEBUG] Code:
+class HybridSearch:
+    """
+    Coordinates semantic search, keyword search, and reranking to produce final results.
+    """
+    
+    def __init__(self, semantic_search: SemanticSearch, keyword_search: KeywordSearch, reranker: Reranker):
+        self.semantic_search = semantic_search
+        self.keyword_search = keyword_search
+        self.reranker = reranker
+
+    def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Executes the hybrid search pipeline.
+        
+        Args:
+            query: The user's natural language query.
+            top_k: Number of final ranked results to return.
+            
+        Returns:
+            A list of ranked result dictionaries containing code chunks and metadata.
+        """
+        # 1. Get semantic results (fetch more than top_k to give the reranker room to work)
+        semantic_results = self.semantic_search.search(query, top_k=top_k * 3)
+        
+        # 2. Get keyword results
+        keyword_results = self.keyword_search.search(query, top_k=top_k * 3)
+        
+        # 3. Rerank semantic results using keyword context
+        ranked_results = self.reranker.rank(query, semantic_results, keyword_results)
+        
+        # 4. Return the top K results
+        return ranked_results[:top_k]
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: __init__
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/hybrid_search.py (Lines 12-15)
+[DEBUG] Code:
+def __init__(self, semantic_search: SemanticSearch, keyword_search: KeywordSearch, reranker: Reranker):
+        self.semantic_search = semantic_search
+        self.keyword_search = keyword_search
+        self.reranker = reranker
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: search
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/hybrid_search.py (Lines 17-38)
+[DEBUG] Code:
+def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Executes the hybrid search pipeline.
+        
+        Args:
+            query: The user's natural language query.
+            top_k: Number of final ranked results to return.
+            
+        Returns:
+            A list of ranked result dictionaries containing code chunks and metadata.
+        """
+        # 1. Get semantic results (fetch more than top_k to give the reranker room to work)
+        semantic_results = self.semantic_search.search(query, top_k=top_k * 3)
+        
+        # 2. Get keyword results
+        keyword_results = self.keyword_search.search(query, top_k=top_k * 3)
+        
+        # 3. Rerank semantic results using keyword context
+        ranked_results = self.reranker.rank(query, semantic_results, keyword_results)
+        
+        # 4. Return the top K results
+        return ranked_results[:top_k]
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: Reranker
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/reranker.py (Lines 4-57)
+[DEBUG] Code:
+class Reranker:
+    """
+    Scores and ranks the combined results from semantic and keyword searches.
+    """
+    
+    def rank(self, query: str, semantic_results: List[Dict[str, Any]], keyword_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Ranks results based on semantic similarity, exact keyword matches in the file,
+        and symbol name matching.
+        """
+        # Create a set of files matched by keyword search for O(1) lookup
+        keyword_matched_files = {kw_res['file_path'] for kw_res in keyword_results}
+        
+        # Lowercase query for symbol/filename matching
+        query_lower = query.lower()
+        
+        ranked_results = []
+        
+        for result in semantic_results:
+            metadata = result['metadata']
+            file_path = metadata['file_path']
+            symbol_name = metadata['symbol_name']
+            
+            # Base score is semantic similarity (scaled up slightly for easier reading)
+            final_score = result['score'] * 10 
+            
+            # Boost if file was also matched by keyword search (ripgrep)
+            if file_path in keyword_matched_files:
+                final_score += 2.0
+                
+            # Boost if the symbol name exactly matches or is contained in the query
+            if symbol_name.lower() in query_lower or query_lower in symbol_name.lower():
+                final_score += 3.0
+                
+            # Boost if the query is in the file path (e.g., "jwt refresh" matching "auth/jwt.py")
+            path_parts = Path(file_path).parts
+            for part in path_parts:
+                if part.lower() in query_lower:
+                    final_score += 1.0
+                    break
+            
+            ranked_results.append({
+                "chunk_id": result['chunk_id'],
+                "file_path": file_path,
+                "symbol_name": symbol_name,
+                "start_line": metadata['start_line'],
+                "end_line": metadata['end_line'],
+                "score": round(final_score, 4),
+                "code": result['code']
+            })
+            
+        # Sort by final score descending
+        ranked_results.sort(key=lambda x: x['score'], reverse=True)
+        return ranked_results
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: rank
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/reranker.py (Lines 9-57)
+[DEBUG] Code:
+def rank(self, query: str, semantic_results: List[Dict[str, Any]], keyword_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Ranks results based on semantic similarity, exact keyword matches in the file,
+        and symbol name matching.
+        """
+        # Create a set of files matched by keyword search for O(1) lookup
+        keyword_matched_files = {kw_res['file_path'] for kw_res in keyword_results}
+        
+        # Lowercase query for symbol/filename matching
+        query_lower = query.lower()
+        
+        ranked_results = []
+        
+        for result in semantic_results:
+            metadata = result['metadata']
+            file_path = metadata['file_path']
+            symbol_name = metadata['symbol_name']
+            
+            # Base score is semantic similarity (scaled up slightly for easier reading)
+            final_score = result['score'] * 10 
+            
+            # Boost if file was also matched by keyword search (ripgrep)
+            if file_path in keyword_matched_files:
+                final_score += 2.0
+                
+            # Boost if the symbol name exactly matches or is contained in the query
+            if symbol_name.lower() in query_lower or query_lower in symbol_name.lower():
+                final_score += 3.0
+                
+            # Boost if the query is in the file path (e.g., "jwt refresh" matching "auth/jwt.py")
+            path_parts = Path(file_path).parts
+            for part in path_parts:
+                if part.lower() in query_lower:
+                    final_score += 1.0
+                    break
+            
+            ranked_results.append({
+                "chunk_id": result['chunk_id'],
+                "file_path": file_path,
+                "symbol_name": symbol_name,
+                "start_line": metadata['start_line'],
+                "end_line": metadata['end_line'],
+                "score": round(final_score, 4),
+                "code": result['code']
+            })
+            
+        # Sort by final score descending
+        ranked_results.sort(key=lambda x: x['score'], reverse=True)
+        return ranked_results
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: KeywordSearch
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/keyword_search.py (Lines 5-43)
+[DEBUG] Code:
+class KeywordSearch:
+    """
+    Uses ripgrep (rg) for exact keyword matching across the repository.
+    """
+    
+    def __init__(self, root_dir: str | Path):
+        self.root_dir = Path(root_dir)
+
+    def search(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+        """
+        Executes a ripgrep search for the exact query string.
+        Returns a list of files that contain the keyword.
+        """
+        # Split query into words to find meaningful keywords, or search the whole string
+        # For simplicity in the MVP, we just use the raw query as a literal string.
+        
+        cmd = ["rg", "-l", "--ignore-case", "--fixed-strings", query, str(self.root_dir)]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                # ripgrep returns 1 if no matches found
+                return []
+                
+            matched_files = result.stdout.strip().split('\n')
+            matched_files = [f for f in matched_files if f][:top_k]
+            
+            formatted_results = []
+            for file_path in matched_files:
+                formatted_results.append({
+                    "file_path": file_path,
+                    "matched_keyword": query
+                })
+                
+            return formatted_results
+            
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            print(f"Warning: Keyword search failed (is ripgrep 'rg' installed in PATH?). Error: {e}")
+            return []
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: __init__
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/keyword_search.py (Lines 10-11)
+[DEBUG] Code:
+def __init__(self, root_dir: str | Path):
+        self.root_dir = Path(root_dir)
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: search
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/keyword_search.py (Lines 13-43)
+[DEBUG] Code:
+def search(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+        """
+        Executes a ripgrep search for the exact query string.
+        Returns a list of files that contain the keyword.
+        """
+        # Split query into words to find meaningful keywords, or search the whole string
+        # For simplicity in the MVP, we just use the raw query as a literal string.
+        
+        cmd = ["rg", "-l", "--ignore-case", "--fixed-strings", query, str(self.root_dir)]
+        
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                # ripgrep returns 1 if no matches found
+                return []
+                
+            matched_files = result.stdout.strip().split('\n')
+            matched_files = [f for f in matched_files if f][:top_k]
+            
+            formatted_results = []
+            for file_path in matched_files:
+                formatted_results.append({
+                    "file_path": file_path,
+                    "matched_keyword": query
+                })
+                
+            return formatted_results
+            
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            print(f"Warning: Keyword search failed (is ripgrep 'rg' installed in PATH?). Error: {e}")
+            return []
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: ChunkBuilder
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/chunker.py (Lines 7-44)
+[DEBUG] Code:
+class ChunkBuilder:
+    """
+    Converts parsed AST symbols into standardized CodeChunk models.
+    """
+    
+    def build_chunks(self, file_path: Path | str, symbols: List[Dict[str, Any]]) -> List[CodeChunk]:
+        """
+        Takes raw symbols extracted by ASTParser and converts them into CodeChunks.
+        
+        Args:
+            file_path: The origin file path of the symbols.
+            symbols: List of extracted symbol dictionaries from the ASTParser.
+            
+        Returns:
+            A list of instantiated CodeChunk dataclasses.
+        """
+        file_str = str(file_path)
+        chunks = []
+
+        for symbol in symbols:
+            # Generate a unique deterministic ID for the chunk
+            # Combining file path, symbol name, and line numbers ensures uniqueness
+            unique_str = f"{file_str}::{symbol['name']}::{symbol['start_line']}::{symbol['end_line']}"
+            chunk_id = hashlib.sha256(unique_str.encode('utf-8')).hexdigest()
+
+            chunk = CodeChunk(
+                chunk_id=chunk_id,
+                file_path=file_str,
+                symbol_name=symbol["name"],
+                chunk_type=symbol["type"],
+                start_line=symbol["start_line"],
+                end_line=symbol["end_line"],
+                docstring=symbol["docstring"],
+                code=symbol["code"]
+            )
+            chunks.append(chunk)
+
+        return chunks
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: build_chunks
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/chunker.py (Lines 12-44)
+[DEBUG] Code:
+def build_chunks(self, file_path: Path | str, symbols: List[Dict[str, Any]]) -> List[CodeChunk]:
+        """
+        Takes raw symbols extracted by ASTParser and converts them into CodeChunks.
+        
+        Args:
+            file_path: The origin file path of the symbols.
+            symbols: List of extracted symbol dictionaries from the ASTParser.
+            
+        Returns:
+            A list of instantiated CodeChunk dataclasses.
+        """
+        file_str = str(file_path)
+        chunks = []
+
+        for symbol in symbols:
+            # Generate a unique deterministic ID for the chunk
+            # Combining file path, symbol name, and line numbers ensures uniqueness
+            unique_str = f"{file_str}::{symbol['name']}::{symbol['start_line']}::{symbol['end_line']}"
+            chunk_id = hashlib.sha256(unique_str.encode('utf-8')).hexdigest()
+
+            chunk = CodeChunk(
+                chunk_id=chunk_id,
+                file_path=file_str,
+                symbol_name=symbol["name"],
+                chunk_type=symbol["type"],
+                start_line=symbol["start_line"],
+                end_line=symbol["end_line"],
+                docstring=symbol["docstring"],
+                code=symbol["code"]
+            )
+            chunks.append(chunk)
+
+        return chunks
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: ChromaVectorStore
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/vector_store.py (Lines 7-82)
+[DEBUG] Code:
+class ChromaVectorStore:
+    """
+    Manages storing and retrieving CodeChunks in a local ChromaDB instance.
+    """
+    
+    def __init__(self, persist_directory: str = "./chroma_db", collection_name: str = "coding_agent"):
+        """
+        Initializes the ChromaDB persistent client.
+        """
+        self.persist_directory = persist_directory
+        self.client = chromadb.PersistentClient(
+            path=self.persist_directory,
+            settings=Settings(anonymized_telemetry=False)
+        )
+        self.collection = self.client.get_or_create_collection(name=collection_name)
+
+    def clear(self):
+        """
+        Deletes the entire collection from ChromaDB and recreates an empty one.
+        This ensures old repositories are purged when indexing a new one.
+        """
+        try:
+            self.client.delete_collection(name=self.collection.name)
+        except Exception:
+            pass
+        self.collection = self.client.get_or_create_collection(name=self.collection.name)
+
+    def add_chunks(self, chunks: List[CodeChunk]):
+        """
+        Adds a batch of CodeChunks to the ChromaDB collection.
+        Assumes that the chunks already have their embeddings populated.
+        """
+        if not chunks:
+            return
+
+        ids = []
+        embeddings = []
+        metadatas = []
+        documents = []
+
+        for chunk in chunks:
+            if not chunk.embedding:
+                print(f"Warning: Chunk {chunk.chunk_id} has no embedding. Skipping.")
+                continue
+                
+            ids.append(chunk.chunk_id)
+            embeddings.append(chunk.embedding)
+            
+            # Store metadata
+            metadata = chunk.to_metadata()
+            metadatas.append(metadata)
+            
+            # The document is the actual code
+            documents.append(chunk.code)
+
+        # Upsert prevents crashing on duplicates and updates existing chunks
+        self.collection.upsert(
+            ids=ids,
+            embeddings=embeddings,
+            metadatas=metadatas,
+            documents=documents
+        )
+
+    def similarity_search_by_vector(self, query_embedding: List[float], n_results: int = 5) -> Dict[str, Any]:
+        """
+        Performs a semantic search using an embedding vector.
+        
+        Returns:
+            ChromaDB query results dictionary containing ids, distances, metadatas, and documents.
+        """
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results,
+            include=["documents", "metadatas", "distances"]
+        )
+        return results
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: __init__
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/vector_store.py (Lines 12-21)
+[DEBUG] Code:
+def __init__(self, persist_directory: str = "./chroma_db", collection_name: str = "coding_agent"):
+        """
+        Initializes the ChromaDB persistent client.
+        """
+        self.persist_directory = persist_directory
+        self.client = chromadb.PersistentClient(
+            path=self.persist_directory,
+            settings=Settings(anonymized_telemetry=False)
+        )
+        self.collection = self.client.get_or_create_collection(name=collection_name)
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: clear
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/vector_store.py (Lines 23-32)
+[DEBUG] Code:
+def clear(self):
+        """
+        Deletes the entire collection from ChromaDB and recreates an empty one.
+        This ensures old repositories are purged when indexing a new one.
+        """
+        try:
+            self.client.delete_collection(name=self.collection.name)
+        except Exception:
+            pass
+        self.collection = self.client.get_or_create_collection(name=self.collection.name)
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: add_chunks
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/vector_store.py (Lines 34-68)
+[DEBUG] Code:
+def add_chunks(self, chunks: List[CodeChunk]):
+        """
+        Adds a batch of CodeChunks to the ChromaDB collection.
+        Assumes that the chunks already have their embeddings populated.
+        """
+        if not chunks:
+            return
+
+        ids = []
+        embeddings = []
+        metadatas = []
+        documents = []
+
+        for chunk in chunks:
+            if not chunk.embedding:
+                print(f"Warning: Chunk {chunk.chunk_id} has no embedding. Skipping.")
+                continue
+                
+            ids.append(chunk.chunk_id)
+            embeddings.append(chunk.embedding)
+            
+            # Store metadata
+            metadata = chunk.to_metadata()
+            metadatas.append(metadata)
+            
+            # The document is the actual code
+            documents.append(chunk.code)
+
+        # Upsert prevents crashing on duplicates and updates existing chunks
+        self.collection.upsert(
+            ids=ids,
+            embeddings=embeddings,
+            metadatas=metadatas,
+            documents=documents
+        )
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: similarity_search_by_vector
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/vector_store.py (Lines 70-82)
+[DEBUG] Code:
+def similarity_search_by_vector(self, query_embedding: List[float], n_results: int = 5) -> Dict[str, Any]:
+        """
+        Performs a semantic search using an embedding vector.
+        
+        Returns:
+            ChromaDB query results dictionary containing ids, distances, metadatas, and documents.
+        """
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results,
+            include=["documents", "metadatas", "distances"]
+        )
+        return results
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: ASTParser
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 5-69)
+[DEBUG] Code:
+class ASTParser:
+    """
+    Parses Python source files into abstract syntax trees and extracts functions, methods, and classes
+    while preserving the exact source code segments.
+    """
+    
+    def parse_file(self, file_path: Path | str) -> List[Dict[str, Any]]:
+        """
+        Parses a single file and returns a list of extracted symbols.
+        
+        Args:
+            file_path: The path to the Python file to parse.
+            
+        Returns:
+            A list of dictionaries, where each dict represents an extracted symbol
+            (function or class) containing its metadata and raw code.
+        """
+        file_path = Path(file_path)
+        try:
+            source = file_path.read_text(encoding='utf-8')
+            tree = ast.parse(source, filename=str(file_path))
+            # Log the AST tree to a file
+            with open("tree_log.txt", "a", encoding="utf-8") as f:
+                f.write(f"=== AST Tree for {file_path} ===\n")
+                f.write(ast.dump(tree, indent=2) + "\n\n")
+        except (SyntaxError, UnicodeDecodeError) as e:
+            # Skip files with syntax errors or encoding issues during MVP
+            print(f"Warning: Failed to parse {file_path}. Error: {e}")
+            return []
+
+        symbols = []
+
+        class SymbolVisitor(ast.NodeVisitor):
+            def visit_FunctionDef(self, node):
+                self._extract_symbol(node, "function")
+                self.generic_visit(node)
+
+            def visit_AsyncFunctionDef(self, node):
+                self._extract_symbol(node, "function")
+                self.generic_visit(node)
+
+            def visit_ClassDef(self, node):
+                self._extract_symbol(node, "class")
+                self.generic_visit(node)
+
+            def _extract_symbol(self, node, symbol_type):
+                docstring = ast.get_docstring(node)
+                code_segment = ast.get_source_segment(source, node)
+                
+                # In rare cases get_source_segment might return None for nodes lacking source info
+                if code_segment is None:
+                    return
+
+                symbols.append({
+                    "name": node.name,
+                    "type": symbol_type,
+                    "start_line": node.lineno,
+                    "end_line": node.end_lineno,
+                    "docstring": docstring,
+                    "code": code_segment
+                })
+
+        visitor = SymbolVisitor()
+        visitor.visit(tree)
+        return symbols
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: parse_file
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 11-69)
+[DEBUG] Code:
+def parse_file(self, file_path: Path | str) -> List[Dict[str, Any]]:
+        """
+        Parses a single file and returns a list of extracted symbols.
+        
+        Args:
+            file_path: The path to the Python file to parse.
+            
+        Returns:
+            A list of dictionaries, where each dict represents an extracted symbol
+            (function or class) containing its metadata and raw code.
+        """
+        file_path = Path(file_path)
+        try:
+            source = file_path.read_text(encoding='utf-8')
+            tree = ast.parse(source, filename=str(file_path))
+            # Log the AST tree to a file
+            with open("tree_log.txt", "a", encoding="utf-8") as f:
+                f.write(f"=== AST Tree for {file_path} ===\n")
+                f.write(ast.dump(tree, indent=2) + "\n\n")
+        except (SyntaxError, UnicodeDecodeError) as e:
+            # Skip files with syntax errors or encoding issues during MVP
+            print(f"Warning: Failed to parse {file_path}. Error: {e}")
+            return []
+
+        symbols = []
+
+        class SymbolVisitor(ast.NodeVisitor):
+            def visit_FunctionDef(self, node):
+                self._extract_symbol(node, "function")
+                self.generic_visit(node)
+
+            def visit_AsyncFunctionDef(self, node):
+                self._extract_symbol(node, "function")
+                self.generic_visit(node)
+
+            def visit_ClassDef(self, node):
+                self._extract_symbol(node, "class")
+                self.generic_visit(node)
+
+            def _extract_symbol(self, node, symbol_type):
+                docstring = ast.get_docstring(node)
+                code_segment = ast.get_source_segment(source, node)
+                
+                # In rare cases get_source_segment might return None for nodes lacking source info
+                if code_segment is None:
+                    return
+
+                symbols.append({
+                    "name": node.name,
+                    "type": symbol_type,
+                    "start_line": node.lineno,
+                    "end_line": node.end_lineno,
+                    "docstring": docstring,
+                    "code": code_segment
+                })
+
+        visitor = SymbolVisitor()
+        visitor.visit(tree)
+        return symbols
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: SymbolVisitor
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 37-65)
+[DEBUG] Code:
+class SymbolVisitor(ast.NodeVisitor):
+            def visit_FunctionDef(self, node):
+                self._extract_symbol(node, "function")
+                self.generic_visit(node)
+
+            def visit_AsyncFunctionDef(self, node):
+                self._extract_symbol(node, "function")
+                self.generic_visit(node)
+
+            def visit_ClassDef(self, node):
+                self._extract_symbol(node, "class")
+                self.generic_visit(node)
+
+            def _extract_symbol(self, node, symbol_type):
+                docstring = ast.get_docstring(node)
+                code_segment = ast.get_source_segment(source, node)
+                
+                # In rare cases get_source_segment might return None for nodes lacking source info
+                if code_segment is None:
+                    return
+
+                symbols.append({
+                    "name": node.name,
+                    "type": symbol_type,
+                    "start_line": node.lineno,
+                    "end_line": node.end_lineno,
+                    "docstring": docstring,
+                    "code": code_segment
+                })
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: visit_FunctionDef
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 38-40)
+[DEBUG] Code:
+def visit_FunctionDef(self, node):
+                self._extract_symbol(node, "function")
+                self.generic_visit(node)
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: visit_AsyncFunctionDef
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 42-44)
+[DEBUG] Code:
+def visit_AsyncFunctionDef(self, node):
+                self._extract_symbol(node, "function")
+                self.generic_visit(node)
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: visit_ClassDef
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 46-48)
+[DEBUG] Code:
+def visit_ClassDef(self, node):
+                self._extract_symbol(node, "class")
+                self.generic_visit(node)
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: _extract_symbol
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 50-65)
+[DEBUG] Code:
+def _extract_symbol(self, node, symbol_type):
+                docstring = ast.get_docstring(node)
+                code_segment = ast.get_source_segment(source, node)
+                
+                # In rare cases get_source_segment might return None for nodes lacking source info
+                if code_segment is None:
+                    return
+
+                symbols.append({
+                    "name": node.name,
+                    "type": symbol_type,
+                    "start_line": node.lineno,
+                    "end_line": node.end_lineno,
+                    "docstring": docstring,
+                    "code": code_segment
+                })
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: TreeSitterParser
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 71-161)
+[DEBUG] Code:
+class TreeSitterParser:
+    """
+    Parses JS/TS files using Tree-Sitter to extract functions, classes, and methods.
+    """
+    def __init__(self):
+        try:
+            from tree_sitter import Language, Parser
+            import tree_sitter_javascript as tsjavascript
+            import tree_sitter_typescript as tstypescript
+            
+            self.js_lang = Language(tsjavascript.language())
+            self.ts_lang = Language(tstypescript.language_typescript())
+            self.tsx_lang = Language(tstypescript.language_tsx())
+            
+            self.js_parser = Parser(self.js_lang)
+            self.ts_parser = Parser(self.ts_lang)
+            self.tsx_parser = Parser(self.tsx_lang)
+            self.available = True
+        except ImportError as e:
+            print(f"Tree-sitter not installed properly: {e}")
+            self.available = False
+
+    def parse_file(self, file_path: Path | str) -> List[Dict[str, Any]]:
+        if not self.available:
+            return []
+            
+        file_path = Path(file_path)
+        try:
+            source = file_path.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            return []
+
+        suffix = file_path.suffix.lower()
+        if suffix in ['.js', '.jsx']:
+            parser = self.js_parser
+            lang = self.js_lang
+        elif suffix == '.ts':
+            parser = self.ts_parser
+            lang = self.ts_lang
+        elif suffix == '.tsx':
+            parser = self.tsx_parser
+            lang = self.tsx_lang
+        else:
+            return []
+
+        tree = parser.parse(bytes(source, "utf8"))
+        
+        query_str = """
+        (function_declaration) @function
+        (method_definition) @method
+        (class_declaration) @class
+        (arrow_function) @arrow
+        """
+        
+        from tree_sitter import Query, QueryCursor
+        try:
+            query = Query(lang, query_str)
+            cursor = QueryCursor(query)
+            captures = cursor.captures(tree.root_node)
+        except Exception as e:
+            print(f"Warning: Failed to execute tree-sitter query on {file_path}. Error: {e}")
+            return []
+
+        symbols = []
+
+        for capture_name, nodes in captures.items():
+            for n in nodes:
+                start_line = n.start_point[0] + 1
+                end_line = n.end_point[0] + 1
+                
+                name_node = n.child_by_field_name('name')
+                if name_node:
+                    name = source[name_node.start_byte:name_node.end_byte]
+                else:
+                    name = "anonymous_" + capture_name
+                    
+                code_segment = source[n.start_byte:n.end_byte]
+                
+                if len(code_segment.strip()) < 5:
+                    continue
+
+                symbols.append({
+                    "name": name,
+                    "type": "class" if capture_name == "class" else "function",
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "docstring": None,
+                    "code": code_segment
+                })
+
+        return symbols
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: __init__
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 75-91)
+[DEBUG] Code:
+def __init__(self):
+        try:
+            from tree_sitter import Language, Parser
+            import tree_sitter_javascript as tsjavascript
+            import tree_sitter_typescript as tstypescript
+            
+            self.js_lang = Language(tsjavascript.language())
+            self.ts_lang = Language(tstypescript.language_typescript())
+            self.tsx_lang = Language(tstypescript.language_tsx())
+            
+            self.js_parser = Parser(self.js_lang)
+            self.ts_parser = Parser(self.ts_lang)
+            self.tsx_parser = Parser(self.tsx_lang)
+            self.available = True
+        except ImportError as e:
+            print(f"Tree-sitter not installed properly: {e}")
+            self.available = False
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: parse_file
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/parser.py (Lines 93-161)
+[DEBUG] Code:
+def parse_file(self, file_path: Path | str) -> List[Dict[str, Any]]:
+        if not self.available:
+            return []
+            
+        file_path = Path(file_path)
+        try:
+            source = file_path.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            return []
+
+        suffix = file_path.suffix.lower()
+        if suffix in ['.js', '.jsx']:
+            parser = self.js_parser
+            lang = self.js_lang
+        elif suffix == '.ts':
+            parser = self.ts_parser
+            lang = self.ts_lang
+        elif suffix == '.tsx':
+            parser = self.tsx_parser
+            lang = self.tsx_lang
+        else:
+            return []
+
+        tree = parser.parse(bytes(source, "utf8"))
+        
+        query_str = """
+        (function_declaration) @function
+        (method_definition) @method
+        (class_declaration) @class
+        (arrow_function) @arrow
+        """
+        
+        from tree_sitter import Query, QueryCursor
+        try:
+            query = Query(lang, query_str)
+            cursor = QueryCursor(query)
+            captures = cursor.captures(tree.root_node)
+        except Exception as e:
+            print(f"Warning: Failed to execute tree-sitter query on {file_path}. Error: {e}")
+            return []
+
+        symbols = []
+
+        for capture_name, nodes in captures.items():
+            for n in nodes:
+                start_line = n.start_point[0] + 1
+                end_line = n.end_point[0] + 1
+                
+                name_node = n.child_by_field_name('name')
+                if name_node:
+                    name = source[name_node.start_byte:name_node.end_byte]
+                else:
+                    name = "anonymous_" + capture_name
+                    
+                code_segment = source[n.start_byte:n.end_byte]
+                
+                if len(code_segment.strip()) < 5:
+                    continue
+
+                symbols.append({
+                    "name": name,
+                    "type": "class" if capture_name == "class" else "function",
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "docstring": None,
+                    "code": code_segment
+                })
+
+        return symbols
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: OllamaEmbedder
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/embeddings.py (Lines 4-54)
+[DEBUG] Code:
+class OllamaEmbedder:
+    """
+    Generates embeddings using a local Ollama instance.
+    """
+    
+    def __init__(self, model_name: str = "nomic-embed-text", host: str = "http://localhost:11434"):
+        """
+        Initialize the Ollama API client for embeddings.
+        
+        Args:
+            model_name: The embedding model to use (default: nomic-embed-text)
+            host: The Ollama server URL
+        """
+        self.model_name = model_name
+        self.api_url = f"{host}/api/embeddings"
+
+    def embed_text(self, text: str) -> List[float]:
+        """
+        Generates an embedding vector for a given string of text.
+        
+        Args:
+            text: The text to embed.
+            
+        Returns:
+            A list of floats representing the embedding vector.
+        """
+        payload = {
+            "model": self.model_name,
+            "prompt": text
+        }
+        
+        try:
+            response = requests.post(self.api_url, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("embedding", [])
+        except requests.exceptions.RequestException as e:
+            print(f"Error generating embedding for text: {e}")
+            return []
+
+    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generates embeddings for a batch of texts.
+        
+        Note: The standard Ollama /api/embeddings endpoint processes one prompt at a time.
+        We process sequentially here. For massive repositories, async requests would be better.
+        """
+        embeddings = []
+        for text in texts:
+            embeddings.append(self.embed_text(text))
+        return embeddings
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: __init__
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/embeddings.py (Lines 9-18)
+[DEBUG] Code:
+def __init__(self, model_name: str = "nomic-embed-text", host: str = "http://localhost:11434"):
+        """
+        Initialize the Ollama API client for embeddings.
+        
+        Args:
+            model_name: The embedding model to use (default: nomic-embed-text)
+            host: The Ollama server URL
+        """
+        self.model_name = model_name
+        self.api_url = f"{host}/api/embeddings"
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: embed_text
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/embeddings.py (Lines 20-42)
+[DEBUG] Code:
+def embed_text(self, text: str) -> List[float]:
+        """
+        Generates an embedding vector for a given string of text.
+        
+        Args:
+            text: The text to embed.
+            
+        Returns:
+            A list of floats representing the embedding vector.
+        """
+        payload = {
+            "model": self.model_name,
+            "prompt": text
+        }
+        
+        try:
+            response = requests.post(self.api_url, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("embedding", [])
+        except requests.exceptions.RequestException as e:
+            print(f"Error generating embedding for text: {e}")
+            return []
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: embed_batch
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/embeddings.py (Lines 44-54)
+[DEBUG] Code:
+def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generates embeddings for a batch of texts.
+        
+        Note: The standard Ollama /api/embeddings endpoint processes one prompt at a time.
+        We process sequentially here. For massive repositories, async requests would be better.
+        """
+        embeddings = []
+        for text in texts:
+            embeddings.append(self.embed_text(text))
+        return embeddings
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: SemanticSearch
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/semantic_search.py (Lines 5-47)
+[DEBUG] Code:
+class SemanticSearch:
+    """
+    Handles converting natural language queries into embeddings and searching the vector store.
+    """
+    
+    def __init__(self, embedder: OllamaEmbedder, vector_store: ChromaVectorStore):
+        self.embedder = embedder
+        self.vector_store = vector_store
+
+    def search(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+        """
+        Executes a semantic search for a given query.
+        """
+        query_embedding = self.embedder.embed_text(query)
+        if not query_embedding:
+            return []
+            
+        results = self.vector_store.similarity_search_by_vector(query_embedding, n_results=top_k)
+        
+        formatted_results = []
+        if not results or not results['ids'] or not results['ids'][0]:
+            return formatted_results
+            
+        # ChromaDB returns a list of lists for each include type
+        ids = results['ids'][0]
+        distances = results['distances'][0]
+        metadatas = results['metadatas'][0]
+        documents = results['documents'][0]
+        
+        for i in range(len(ids)):
+            # Convert distance to a similarity score. 
+            # Chroma L2 distance: lower is better. We invert it for a "score" where higher is better.
+            distance = distances[i]
+            score = 1.0 / (1.0 + distance)
+            
+            formatted_results.append({
+                "chunk_id": ids[i],
+                "score": score,
+                "metadata": metadatas[i],
+                "code": documents[i]
+            })
+            
+        return formatted_results
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: __init__
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/semantic_search.py (Lines 10-12)
+[DEBUG] Code:
+def __init__(self, embedder: OllamaEmbedder, vector_store: ChromaVectorStore):
+        self.embedder = embedder
+        self.vector_store = vector_store
+[DEBUG] --------------------------------------------------
+
+
+[DEBUG] --------------------------------------------------
+[DEBUG] Storing Chunk -> Symbol: search
+[DEBUG] File: /Users/harshitchoudhary/Tech2go/Agentic/coding-agent/backend/retrieval/semantic_search.py (Lines 14-47)
+[DEBUG] Code:
+def search(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+        """
+        Executes a semantic search for a given query.
+        """
+        query_embedding = self.embedder.embed_text(query)
+        if not query_embedding:
+            return []
+            
+        results = self.vector_store.similarity_search_by_vector(query_embedding, n_results=top_k)
+        
+        formatted_results = []
+        if not results or not results['ids'] or not results['ids'][0]:
+            return formatted_results
+            
+        # ChromaDB returns a list of lists for each include type
+        ids = results['ids'][0]
+        distances = results['distances'][0]
+        metadatas = results['metadatas'][0]
+        documents = results['documents'][0]
+        
+        for i in range(len(ids)):
+            # Convert distance to a similarity score. 
+            # Chroma L2 distance: lower is better. We invert it for a "score" where higher is better.
+            distance = distances[i]
+            score = 1.0 / (1.0 + distance)
+            
+            formatted_results.append({
+                "chunk_id": ids[i],
+                "score": score,
+                "metadata": metadatas[i],
+                "code": documents[i]
+            })
+            
+        return formatted_results
+[DEBUG] --------------------------------------------------
+

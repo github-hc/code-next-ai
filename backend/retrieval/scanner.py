@@ -29,7 +29,7 @@ class FileScanner:
             A list of Path objects representing the discovered source files.
         """
         if extensions is None:
-            extensions = {".py"}
+            extensions = {".py", ".js", ".jsx", ".ts", ".tsx"}
 
         valid_files = []
 
