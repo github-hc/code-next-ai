@@ -15,8 +15,6 @@ def load_settings():
                 return json.load(f)
         except Exception:
             return {}
-    return {}
-
 SETTINGS = load_settings()
 LOG_CHUNKS = SETTINGS.get("log_chunks", False)
 LOG_AST_PARSER = SETTINGS.get("log_ast_parser", False)
@@ -30,6 +28,7 @@ from backend.retrieval.semantic_search import SemanticSearch
 from backend.retrieval.keyword_search import KeywordSearch
 from backend.retrieval.reranker import Reranker
 from backend.retrieval.hybrid_search import HybridSearch
+from backend.generation.ollama_llm import OllamaLLM
 
 def build_index(repo_path: str):
     """
@@ -96,7 +95,7 @@ def build_index(repo_path: str):
     print(f"[*] Indexing complete. Indexed {total_chunks} code chunks into ChromaDB.")
     return total_chunks
 
-def query_repo(repo_path: str, query: str):
+def query_repo(repo_path: str, query: str, model_name: str = "qwen2.5:7b"):
     """
     Executes a hybrid search query against the indexed repository.
     """
@@ -116,7 +115,10 @@ def query_repo(repo_path: str, query: str):
     
     results = hybrid_search.search(query, top_k=5)
     
-    return results
+    llm = OllamaLLM(model_name=model_name)
+    answer = llm.generate_answer(query, results)
+    
+    return answer, results
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Local AI Coding Agent MVP")
@@ -132,7 +134,12 @@ if __name__ == "__main__":
         if not args.query:
             print("Error: --query argument is required when using the 'query' command.")
             sys.exit(1)
-        results = query_repo(args.repo, args.query)
+        answer, results = query_repo(args.repo, args.query)
+        
+        print("\n=== AI Answer ===")
+        print(answer)
+        print("\n=== References ===")
+        
         if not results:
             print("No relevant code chunks found.")
             print("==================================================")

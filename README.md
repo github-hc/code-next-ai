@@ -1,99 +1,229 @@
-# Local AI Coding Agent (MVP)
+<div align="center">
 
-This project is a repository intelligence system focused on allowing developers to perform natural language semantic queries over their codebase entirely locally and offline.
+# 🧠 Code Next AI
 
-This is Phase 1 of the agent: Natural language query → relevant files/functions/code chunks.
+### Your Codebase. Your Machine. Your Rules.
 
-## Architecture
+**A fully offline, privacy-first AI coding assistant that understands your entire codebase — no cloud, no API keys, no subscriptions.**
 
-The system uses a state-of-the-art offline RAG (Retrieval-Augmented Generation) pipeline adapted specifically for source code:
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Ollama](https://img.shields.io/badge/Powered%20by-Ollama-black?style=flat-square)](https://ollama.com)
+[![ChromaDB](https://img.shields.io/badge/Vector%20DB-ChromaDB-orange?style=flat-square)](https://trychroma.com)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-1. **Repository Scanner**: Recursively scans standard repositories, ignoring `.git`, `node_modules`, `venv`, etc.
-2. **AST Parser**: Instead of naive text chunking, uses Python's built-in `ast` to extract discrete functions and classes, preserving exact source formatting and context.
-3. **Chunk Builder**: Maps AST nodes to semantic `CodeChunk` models containing metadata like exact line numbers.
-4. **Embeddings**: Uses a local Ollama instance running `nomic-embed-text` to generate vector representations of the code.
-5. **Vector Store**: Persists embeddings locally using ChromaDB.
-6. **Hybrid Search Engine**:
-   - **Semantic Search**: Uses ChromaDB to find conceptually similar code.
-   - **Keyword Search**: Uses `ripgrep` (`rg`) to find exact symbol and keyword matches.
-7. **Reranker**: Combines the results, boosting scores for exact symbol matches, file path relevance, and keyword occurrences to provide a highly accurate Top K ranking.
+</div>
 
-## Prerequisites
+---
 
-- **Python 3.11+**
-- **Ollama**: Installed and running locally.
-- **ripgrep**: The `rg` command-line tool must be installed and available in your system's PATH.
-  - Mac: `brew install ripgrep`
+## 🔒 100% Offline. Zero Tokens. Infinite Queries.
 
-## Setup Instructions
+Unlike GitHub Copilot, Cursor, or any cloud-based AI tool, **Code Next AI runs entirely on your local machine**:
 
-1. **Install Python dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+| Feature | Code Next AI | Cloud AI Tools |
+|---|---|---|
+| 🔒 Privacy | **Your code never leaves your machine** | Code sent to remote servers |
+| 💰 Cost | **Free forever** | API tokens, monthly subscriptions |
+| 🌐 Internet | **No connection required** | Requires internet |
+| ⚡ Speed | **No rate limits** | Rate-limited, throttled |
+| 🏢 Enterprise | **Works on air-gapped systems** | Not possible |
 
-2. **Pull the Ollama embedding model:**
-   Ensure Ollama is running (`ollama serve`), then pull the model:
-   ```bash
-   ollama pull nomic-embed-text
-   ```
+---
 
-## Usage
+## ✨ What It Does
 
-The agent has two primary modes: `index` and `query`.
+Ask natural language questions about any codebase and get **AI-generated answers with referenced source code** — all processed locally.
 
-### 1. Indexing a Repository
+**Example questions you can ask:**
+- *"How does the authentication flow work?"*
+- *"Where is the database connection configured?"*
+- *"What does the `make_nws_request` function do?"*
+- *"Which functions handle error responses?"*
 
-Before you can query a repository, you must build the semantic index. This will scan the files, parse the AST, generate embeddings via Ollama, and store them in a local ChromaDB folder (`chroma_db/`).
+---
+
+## 🏗️ Architecture
+
+Code Next AI uses a state-of-the-art **offline RAG (Retrieval-Augmented Generation)** pipeline built specifically for source code:
+
+```
+Your Codebase
+     │
+     ▼
+┌─────────────────┐
+│  File Scanner   │  Recursively scans files, ignoring .git, node_modules, venv
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  AST / Tree-    │  Extracts functions & classes with exact line numbers
+│  Sitter Parser  │  (Python via ast, JS/TS via tree-sitter)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Chunk Builder  │  Builds semantic CodeChunk objects with metadata
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Ollama Embedder │  Generates local vector embeddings (nomic-embed-text)
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│    ChromaDB     │  Persists embeddings in a local vector database
+└─────────────────┘
+         │  (Query time)
+         ▼
+┌─────────────────────────────────┐
+│        Hybrid Search Engine     │
+│  ┌─────────────┐ ┌───────────┐  │
+│  │  Semantic   │ │  Keyword  │  │
+│  │  Search     │ │  Search   │  │
+│  │ (ChromaDB)  │ │ (ripgrep) │  │
+│  └──────┬──────┘ └─────┬─────┘  │
+│         └──────┬────────┘       │
+│                ▼                │
+│           Reranker              │
+└────────────────┬────────────────┘
+                 │
+                 ▼
+┌─────────────────┐
+│  Ollama LLM     │  Synthesizes answer from retrieved context (local model)
+└────────┬────────┘
+         │
+         ▼
+   Answer + References (in the UI)
+```
+
+---
+
+## 🖥️ UI: VS Code–Style 3-Pane Interface
+
+The desktop app (powered by [Flet](https://flet.dev)) gives you a familiar IDE-like experience:
+
+- **Left Pane — Explorer**: Browse your indexed repository files. Click any file to instantly open it in the editor.
+- **Middle Pane — Code Editor**: Full syntax-highlighted code viewer built into the app.
+- **Right Pane — AI Chat**: Ask questions, get streamed answers with collapsible reference panels showing exactly which functions were used.
+
+---
+
+## ⚙️ Prerequisites
+
+| Dependency | Purpose | Install |
+|---|---|---|
+| **Python 3.10+** | Runtime | [python.org](https://python.org) |
+| **Ollama** | Local LLM + Embeddings engine | [ollama.com](https://ollama.com) |
+| **ripgrep** | Keyword search | `brew install ripgrep` |
+
+---
+
+## 🚀 Quick Start
+
+### 1. Clone & Install
 
 ```bash
-python main.py index --repo /path/to/your/repository
+git clone <repo-url>
+cd coding-agent
+
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
 ```
-*(If `--repo` is omitted, it defaults to the current directory).*
 
-### 2. Querying the Repository
+### 2. Pull Local Models
 
-Once indexed, you can perform hybrid searches using natural language.
+Ensure Ollama is running (`ollama serve`), then pull the required models:
 
 ```bash
-python main.py query --repo /path/to/your/repository --query "Fix JWT refresh issue"
+# Embedding model (required for indexing & search)
+ollama pull nomic-embed-text
+
+# LLM model for answering (pick one)
+ollama pull qwen2.5:7b      # Recommended — fast & capable
+ollama pull phi3:mini        # Lighter, faster
+ollama pull gemma4:latest    # Google's model
 ```
 
-**Example Output:**
-```
-==================================================
-QUERY:
-"Fix JWT refresh issue"
+### 3. Launch the App
 
-RESULTS:
-1.
-File: auth/jwt.py
-Symbol: refresh_token
-Lines: 22-48
-Score: 13.92
-
-2.
-File: auth/session.py
-Symbol: validate_session
-Lines: 10-32
-Score: 11.87
-==================================================
+```bash
+python app.py
 ```
 
-## Project Structure
+The desktop UI will open. From there:
+1. Click **Browse Folder** → select your codebase
+2. Click **Index Repository** → wait for indexing to complete
+3. Ask your first question in the chat panel!
 
-- `main.py`: The CLI entrypoint.
-- `backend/models/`: Contains the core data structures (`CodeChunk`).
-- `backend/retrieval/`:
-  - `scanner.py`: File discovery.
-  - `parser.py`: AST extraction.
-  - `chunker.py`: Model building.
-  - `embeddings.py`: Ollama integration.
-  - `vector_store.py`: ChromaDB integration.
-  - `semantic_search.py`, `keyword_search.py`, `hybrid_search.py`: The retrieval engine.
-  - `reranker.py`: The final scoring logic.
+---
 
-## Future Roadmap
-- Expand AST parsing to multiple languages via `tree-sitter`.
-- Add an LLM layer to synthesize the retrieved chunks into conversational answers.
-- Implement file-watching to update the ChromaDB index incrementally on file save.
+## 🖥️ CLI Usage (Advanced)
+
+You can also use the agent directly from the terminal:
+
+```bash
+# Index a repository
+python main.py index --repo /path/to/your/project
+
+# Query it
+python main.py query --repo /path/to/your/project --query "How does authentication work?"
+```
+
+---
+
+## 📁 Project Structure
+
+```
+coding-agent/
+├── app.py                      # Desktop UI (Flet, 3-pane VS Code layout)
+├── main.py                     # CLI entrypoint + core build_index / query_repo
+├── settings.json               # Feature flags (log_chunks, log_ast_parser)
+├── requirements.txt
+│
+├── backend/
+│   ├── generation/
+│   │   └── ollama_llm.py       # Local LLM answer generation
+│   └── retrieval/
+│       ├── scanner.py          # File discovery & filtering
+│       ├── parser.py           # AST (Python) + Tree-Sitter (JS/TS) parsing
+│       ├── chunker.py          # CodeChunk model builder
+│       ├── embeddings.py       # Ollama nomic-embed-text client
+│       ├── vector_store.py     # ChromaDB integration
+│       ├── semantic_search.py  # Vector similarity search
+│       ├── keyword_search.py   # ripgrep keyword search
+│       ├── hybrid_search.py    # Unified search orchestrator
+│       └── reranker.py         # Result scoring & ranking
+│
+└── chroma_db/                  # Local vector database (auto-created)
+```
+
+---
+
+## 🗺️ Roadmap
+
+- [x] AST-based Python parsing
+- [x] Tree-Sitter parsing for JS/TS
+- [x] Local embeddings via Ollama
+- [x] Hybrid search (semantic + keyword)
+- [x] LLM answer generation (fully offline)
+- [x] 3-pane VS Code–style desktop UI
+- [x] In-app file viewer with syntax highlighting
+- [x] Collapsible reference panels in chat
+- [ ] File watcher for incremental re-indexing on save
+- [ ] Support for more languages (Go, Rust, Java)
+- [ ] Multi-repo workspace support
+- [ ] Chat history persistence
+
+---
+
+## 🛡️ Privacy Guarantee
+
+> **Your code is yours.** Code Next AI performs all computation locally. No code, query, or result is ever transmitted to any external server.
+
+---
+
+<div align="center">
+  Built with ❤️ for developers who care about their privacy.
+</div>
