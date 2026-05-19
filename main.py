@@ -98,6 +98,7 @@ def build_index(repo_path: str):
 def query_repo(repo_path: str, query: str, model_name: str = "qwen2.5:7b"):
     """
     Executes a hybrid search query against the indexed repository.
+    Returns (token_stream_generator, results_list).
     """
     repo_path_obj = Path(repo_path).expanduser().resolve()
     print(f"\n==================================================")
@@ -112,13 +113,12 @@ def query_repo(repo_path: str, query: str, model_name: str = "qwen2.5:7b"):
     reranker = Reranker()
     
     hybrid_search = HybridSearch(semantic_search, keyword_search, reranker)
-    
     results = hybrid_search.search(query, top_k=5)
     
     llm = OllamaLLM(model_name=model_name)
-    answer = llm.generate_answer(query, results)
+    token_stream = llm.generate_answer_stream(query, results)
     
-    return answer, results
+    return token_stream, results
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Local AI Coding Agent MVP")
@@ -134,10 +134,13 @@ if __name__ == "__main__":
         if not args.query:
             print("Error: --query argument is required when using the 'query' command.")
             sys.exit(1)
-        answer, results = query_repo(args.repo, args.query)
+        token_stream, results = query_repo(args.repo, args.query)
         
         print("\n=== AI Answer ===")
-        print(answer)
+        # Print each token as it arrives for a typewriter effect in the terminal
+        for token in token_stream:
+            print(token, end="", flush=True)
+        print()
         print("\n=== References ===")
         
         if not results:

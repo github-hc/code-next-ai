@@ -1,5 +1,6 @@
 import requests
-from typing import List, Dict, Any
+import json
+from typing import List, Dict, Any, Generator
 
 class OllamaLLM:
     """
@@ -10,21 +11,17 @@ class OllamaLLM:
         self.model_name = model_name
         self.api_url = f"{host}/api/generate"
         
-    def generate_answer(self, query: str, context_chunks: List[Dict[str, Any]]) -> str:
-        """
-        Generates an answer using the provided query and context chunks.
-        """
+    def _build_prompt(self, query: str, context_chunks: List[Dict[str, Any]]) -> str:
         context_texts = []
         for i, chunk in enumerate(context_chunks, 1):
             file_path = chunk.get('metadata', {}).get('file_path', 'Unknown file')
             code = chunk.get('code', '')
             context_texts.append(f"--- Chunk {i} from {file_path} ---\n{code}\n")
-            
+
         context_str = "\n".join(context_texts)
-        
-        prompt = f"""You are a helpful coding assistant. 
+        return f"""You are a helpful coding assistant. 
 Use the following retrieved code chunks to answer the user's question. 
-If the answer is not in the context, say "I don't have enough context to answer."
+If the answer is not in the context, say \"I don't have enough context to answer.\"
 
 Context:
 {context_str}
@@ -32,17 +29,32 @@ Context:
 Question:
 {query}
 """
-        
+
+    def generate_answer_stream(self, query: str, context_chunks: List[Dict[str, Any]]) -> Generator[str, None, None]:
+        """
+        Streams the answer token by token. Yields each text fragment as it arrives.
+        """
         payload = {
             "model": self.model_name,
-            "prompt": prompt,
-            "stream": False
+            "prompt": self._build_prompt(query, context_chunks),
+            "stream": True,
         }
-        
         try:
-            response = requests.post(self.api_url, json=payload, timeout=60)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("response", "No response generated.")
+            with requests.post(self.api_url, json=payload, stream=True, timeout=(10, 300)) as response:
+                response.raise_for_status()
+                for raw_line in response.iter_lines():
+                    if raw_line:
+                        data = json.loads(raw_line)
+                        token = data.get("response", "")
+                        if token:
+                            yield token
+                        if data.get("done", False):
+                            break
         except Exception as e:
-            return f"Error communicating with LLM: {e}"
+            yield f"\n\n*Error communicating with LLM: {e}*"
+
+    def generate_answer(self, query: str, context_chunks: List[Dict[str, Any]]) -> str:
+        """
+        Blocking convenience wrapper — joins all streamed tokens.
+        """
+        return "".join(self.generate_answer_stream(query, context_chunks))
