@@ -13,6 +13,8 @@
 
 </div>
 
+<img width="2880" height="1800" alt="image" src="https://github.com/user-attachments/assets/bc4ff09c-9f1e-4fd2-82bd-49b162db7082" />
+
 ---
 
 ## 🔒 100% Offline. Zero Tokens. Infinite Queries.
