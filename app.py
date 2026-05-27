@@ -320,7 +320,10 @@ def main(page: ft.Page):
         )
         page.update()
 
-    def handle_query(e):
+    async def handle_query(e):
+        import asyncio
+        import time
+
         current_repo_path = repo_path_input.value
         if not current_repo_path:
             add_simple_message("Please enter a repository path and index it first.")
@@ -330,76 +333,70 @@ def main(page: ft.Page):
         if not query or query_input.disabled:
             return
 
-        # ── Immediately update UI (on the event thread) ──
+        # Immediate UI feedback
         query_input.disabled = True
         send_btn.disabled = True
         query_input.value = ""
-        page.update()                    # flush: clears the input box
+        page.update()
 
-        add_user_message(query)          # shows user bubble right away
-        thinking_bubble = add_thinking_bubble()  # shows spinner right away
+        add_user_message(query)
+        thinking_bubble = add_thinking_bubble()
 
         selected_model = model_dropdown.value
 
-        # ── Heavy work runs off the UI thread ──
-        def run_query():
-            try:
-                token_stream, results = query_repo(current_repo_path, query, model_name=selected_model)
-                
-                # Remove the thinking bubble as soon as retrieval is complete / generation starts
+        try:
+            # query_repo is a synchronous function — run it in a thread so the UI stays responsive
+            loop = asyncio.get_event_loop()
+            token_stream, results = await loop.run_in_executor(
+                None, lambda: query_repo(current_repo_path, query, model_name=selected_model)
+            )
+
+            if thinking_bubble in chat_list.controls:
                 chat_list.controls.remove(thinking_bubble)
-                
-                # Create a placeholder bubble for the agent response
-                md_control = ft.Markdown(
-                    "",
-                    selectable=True,
-                    extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
-                    code_theme="atom-one-dark",
-                )
-                agent_bubble = ft.Row(
-                    [
-                        ft.Container(
-                            content=md_control,
-                            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                            padding=PAD_BUBBLE,
-                            border_radius=BR_BUBBLE,
-                            expand=True,
-                        )
-                    ],
-                    alignment=ft.MainAxisAlignment.START,
-                )
-                chat_list.controls.append(agent_bubble)
-                page.update()
-                # Stream tokens to the UI with throttling to prevent WebSocket flooding
-                import time
-                full_text = ""
-                last_update = time.time()
-                for token in token_stream:
-                    full_text += token
-                    md_control.value = full_text
-                    
-                    # Update Flet UI at most once every 50ms (silky smooth, zero flooding)
-                    now = time.time()
-                    if now - last_update >= 0.05:
-                        page.update()
-                        last_update = now
-                
-                # Final flush to ensure the completed response is fully displayed
                 page.update()
 
+            md_control = ft.Markdown(
+                "",
+                selectable=True,
+                extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                code_theme="atom-one-dark",
+            )
+            agent_bubble = ft.Row(
+                [
+                    ft.Container(
+                        content=md_control,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        padding=PAD_BUBBLE,
+                        border_radius=BR_BUBBLE,
+                        expand=True,
+                    )
+                ],
+                alignment=ft.MainAxisAlignment.START,
+            )
+            chat_list.controls.append(agent_bubble)
+            page.update()
 
-                # Display references underneath
-                add_references(results, current_repo_path)
-            except Exception as ex:
-                if thinking_bubble in chat_list.controls:
-                    chat_list.controls.remove(thinking_bubble)
-                add_simple_message(f"Error during search: {ex}")
-            finally:
-                query_input.disabled = False
-                send_btn.disabled = False
-                page.update()
+            full_text = ""
+            last_update = time.time()
+            for token in token_stream:
+                full_text += token
+                md_control.value = full_text
+                now = time.time()
+                if now - last_update >= 0.05:
+                    page.update()
+                    last_update = now
 
-        threading.Thread(target=run_query, daemon=True).start()
+            page.update()
+            add_references(results, current_repo_path)
+        except Exception as ex:
+            if thinking_bubble in chat_list.controls:
+                chat_list.controls.remove(thinking_bubble)
+            add_simple_message(f"Error during search: {ex}")
+        finally:
+            query_input.disabled = False
+            send_btn.disabled = False
+            page.update()
+
 
     send_btn = ft.IconButton(
         icon=ft.Icons.SEND_ROUNDED,
@@ -429,6 +426,7 @@ def main(page: ft.Page):
             ft.dropdown.Option("qwen2.5:1.5b"),
             ft.dropdown.Option("phi3:mini"),
             ft.dropdown.Option("gemma4:latest"),
+            ft.dropdown.Option("zero-cost-coder"),
         ],
         value="qwen2.5:7b",
         width=148,
