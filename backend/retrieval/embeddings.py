@@ -6,7 +6,7 @@ class OllamaEmbedder:
     Generates embeddings using a local Ollama instance.
     """
     
-    def __init__(self, model_name: str = "nomic-embed-text", host: str = "http://localhost:11434"):
+    def __init__(self, model_name: str = "nomic-embed-text", host: str = "http://127.0.0.1:11434"):
         """
         Initialize the Ollama API client for embeddings.
         

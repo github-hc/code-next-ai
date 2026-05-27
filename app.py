@@ -410,7 +410,11 @@ def main(page: ft.Page):
     model_dropdown = ft.Dropdown(
         tooltip="Select LLM model",
         options=[
+            ft.dropdown.Option("qwen2.5-coder:1.5b"),
             ft.dropdown.Option("qwen2.5:7b"),
+            ft.dropdown.Option("qwen2.5-coder:0.5b"),
+            ft.dropdown.Option("qwen2.5:3b"),
+            ft.dropdown.Option("qwen2.5:1.5b"),
             ft.dropdown.Option("phi3:mini"),
             ft.dropdown.Option("gemma4:latest"),
         ],
