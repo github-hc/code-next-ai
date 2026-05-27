@@ -1,4 +1,5 @@
 {
-  "log_chunks": true,
-  "log_ast_parser": true
+  "log_chunks": false,
+  "log_ast_parser": false,
+  "log_queries": true
 }

@@ -370,13 +370,23 @@ def main(page: ft.Page):
                 )
                 chat_list.controls.append(agent_bubble)
                 page.update()
-
-                # Stream tokens to the UI
+                # Stream tokens to the UI with throttling to prevent WebSocket flooding
+                import time
                 full_text = ""
+                last_update = time.time()
                 for token in token_stream:
                     full_text += token
                     md_control.value = full_text
-                    page.update()
+                    
+                    # Update Flet UI at most once every 50ms (silky smooth, zero flooding)
+                    now = time.time()
+                    if now - last_update >= 0.05:
+                        page.update()
+                        last_update = now
+                
+                # Final flush to ensure the completed response is fully displayed
+                page.update()
+
 
                 # Display references underneath
                 add_references(results, current_repo_path)
@@ -410,6 +420,8 @@ def main(page: ft.Page):
     model_dropdown = ft.Dropdown(
         tooltip="Select LLM model",
         options=[
+            ft.dropdown.Option("deepseek-coder:latest"),
+            ft.dropdown.Option("qwen2.5-coder:latest"),
             ft.dropdown.Option("qwen2.5-coder:1.5b"),
             ft.dropdown.Option("qwen2.5:7b"),
             ft.dropdown.Option("qwen2.5-coder:0.5b"),
